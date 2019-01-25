@@ -2,7 +2,7 @@
 
 ## For Dapps (Client SDK - browser)
 
-1.  Install
+### Install
 
 ```bash
 yarn add @walletconnect/browser
@@ -12,7 +12,7 @@ yarn add @walletconnect/browser
 npm install --save @walletconnect/browser
 ```
 
-2.  Example
+### Initiate Connection
 
 ```js
 import WalletConnect from "@walletconnect/browser";
@@ -26,27 +26,57 @@ const walletConnector = new WalletConnect({
 });
 
 /**
- *  Initiate WalletConnect session
- */
-await walletConnector.initSession();
-
-/**
  *  Check if connection is already established
  */
-if (walletConnector.isConnected) {
-  // If yes, get accounts
-  const accounts = walletConnector.accounts;
-} else {
-  // If not, prompt the user to scan the QR code
+if (!walletConnector.connected) {
+  // create new session
+  await walletConnector.createSession();
+
+  // get uri for QR Code modal
   const uri = walletConnector.uri;
 
-  // Listen for session confirmation from wallet
-  await walletConnector.listenSessionStatus();
-
-  // Get accounts after session status is resolved
-  accounts = walletConnector.accounts;
+  // display QR Code modal
+  WalletConnectQRCodeModal.open(uri, () => {
+    console.log("QR Code Modal closed");
+  });
 }
 
+/**
+ *  Subscribe to connection events
+ */
+walletConnector.on("connect", (error, payload) => {
+  if (error) {
+    throw error;
+  }
+
+  // close QR Code Modal
+  WalletConnectQRCodeModal.close();
+
+  // get provided accounts and chainId
+  const { accounts, chainId } = payload.params[0];
+});
+
+walletConnector.on("session_update", (error, payload) => {
+  if (error) {
+    throw error;
+  }
+
+  // get updated accounts and chainId
+  const { accounts, chainId } = payload.params[0];
+});
+
+walletConnector.on("disconnect", (error, payload) => {
+  if (error) {
+    throw error;
+  }
+
+  // delete walletConnector
+});
+```
+
+### Send Transaction
+
+```js
 /**
  *  Draft transaction
  */
@@ -69,7 +99,11 @@ try {
   // Rejected Transaction
   console.error(error);
 }
+```
 
+### Sign Message
+
+```js
 /**
  *  Draft Message Parameters
  */
@@ -88,7 +122,11 @@ try {
   // Rejected signing
   console.error(error);
 }
+```
 
+### Sign Typed Data
+
+```js
 /**
  *  Draft Typed Data
  */
@@ -147,7 +185,7 @@ try {
 
 ## For Wallets (Client SDK - react-native)
 
-1.  Install
+### Install
 
 ```bash
 /**
@@ -161,14 +199,15 @@ yarn add @walletconnect/react-native
 npm install --save @walletconnect/react-native
 
 /**
- *  Nodify 'crypto' package for cryptography
+ *  Polyfill NodeJS modules for React-Native
  */
 
-# install "crypto" shims and run package-specific hacks
-rn-nodeify --install "crypto" --hack
+npm install --save rn-nodeify
+
+rn-nodeify --install --hack
 ```
 
-2.  Example
+### Initiate Connection
 
 ```js
 import RNWalletConnect from '@walletconnect/react-native'
@@ -176,79 +215,100 @@ import RNWalletConnect from '@walletconnect/react-native'
 /**
  *  Create WalletConnector
  */
-const walletConnector = new RNWalletConnect({
-  uri: 'ethereum:wc-8a5e5bdc-a0e4-47...TJRNmhWJmoxdFo6UDk2WlhaOyQ5N0U=',
-  push: {
-    type: 'fcm',
-    token: 'cSgGd8BWURk:APA91bGXsLd_...YdFbutyfc8pScl0Qe8-',
-    webhook: 'https://push.walletconnect.org/notification/new',
+const walletConnector = new RNWalletConnect(
+  {
+    uri: 'wc:8a5e5bdc-a0e4-47...TJRNmhWJmoxdFo6UDk2WlhaOyQ5N0U=',       // Required
+  },
+  {
+    clientMeta: {                                                       // Required
+      description: "WalletConnect Developer App",
+      url: "https://walletconnect.org",
+      icons: ["https://walletconnect.org/walletconnect-logo.png"],
+      name: "WalletConnect",
+      ssl: true
+    },
+    push: {                                                             // Optional
+      url: "https://push.walletconnect.org",
+      type: "fcm",
+      token: token,
+      peerMeta: true,
+      language: language
+    }
   }
-})
+)
 
+/**
+ *  Subscribe to connection events
+ */
+walletConnector.on("call_request", (error, payload) => {
+  if (error) {
+    throw error;
+  }
+
+  // Handle Call Request
+  payload {
+    id: 1,
+    jsonrpc: '2.0'.
+    method: 'eth_sign',
+    params: [
+      "0xbc28ea04101f03ea7a94c1379bc3ab32e65e62d3",
+      "My email is john@doe.com - 1537836206101"
+    ]
+  }
+});
+
+walletConnector.on("disconnect", (error, payload) => {
+  if (error) {
+    throw error;
+  }
+
+  // delete walletConnector
+});
+```
+
+### Manage Connection
+
+```js
 /**
  *  Approve Session
  */
-await walletConnector.approveSession({
+walletConnector.approveSession({
   accounts: [
     '0x4292...931B3',
     '0xa4a7...784E8',
     ...
-  ]
+  ],
+  chainId: 1
 })
 
 /**
  *  Reject Session
  */
-await walletConnector.rejectSession()
+walletConnector.rejectSession()
 
 
 /**
  *  Kill Session
  */
-await walletConnector.killSession()
+walletConnector.killSession()
+```
 
+### Manage Call Requests
 
+```js
 /**
- *  Handle push notification events & get call data
+ *  Approve Call Request
  */
-FCM.on(FCMEvent.Notification, event => {
-  const { sessionId, callId } = event;
-
-  const callData = await walletConnector.getCallRequest(callId);
-
-  // example callData
-  {
-    method: 'eth_sendTransaction',
-    data: {
-      from: '0xbc28ea04101f03ea7a94c1379bc3ab32e65e62d3',
-      to: '0x0',
-      nonce: 1,
-      gas: 100000,
-      value: 0,
-      data: '0x0'
-    }
-  }
+walletConnector.approveRequest({
+  id: 1,
+  result: "0x41791102999c339c844880b23950704cc43aa840f3739e365323cda4dfa89e7a"
 });
 
 /**
- *  Get all calls from bridge
+ *  Reject Call Request
  */
-const allCalls = await walletConnector.getAllCallRequests();
-
-/**
- *  Approve and share call result
- */
-walletConnector.approveCallRequest(
-  callId,
-  {
-    result: '0xabcd...873'
-  }
-)
-
-/**
- *  Reject call request
- */
-walletConnector.rejectCallRequest(
-  callId
-)
+walletConnector.rejectRequest({
+  id: 1,
+  result: null
+});
 ```
